@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "aws-sam",
+            "request": "direct-invoke",
+            "name": "api:api::api.Query::AllMessages (dotnet6)",
+            "invokeTarget": {
+                "target": "code",
+                "projectRoot": "${workspaceFolder}/Task 1/api",
+                "lambdaHandler": "api::api.Query::AllMessages"
+            },
+            "lambda": {
+                "runtime": "dotnet6",
+                "payload": {},
+                "environmentVariables": {}
+            }
+        },
+        {
+            "name": ".NET Core Launch (console)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Cosc26392/bin/Debug/netcoreapp3.1/Cosc26392.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Cosc26392",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
