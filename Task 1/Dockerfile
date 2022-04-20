@@ -19,7 +19,7 @@ WORKDIR /code
 RUN dotnet publish -c Release
 
 #### Build the API container ###
-FROM mcr.microsoft.com/dotnet/aspnet:6.0
+FROM mcr.microsoft.com/dotnet/aspnet:7.0
 
 # Install graphics support
 RUN apt-get update && apt-get install -y libfontconfig1
