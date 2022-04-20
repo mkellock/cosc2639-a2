@@ -1,20 +1,10 @@
-using System;
-using System.Collections;
-using System.IO;
-using System.Net;
-using System.Reflection;
-using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using Amazon.S3;
-using Amazon.S3.Model;
-using Microsoft.Extensions.Localization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 
 namespace api
 {
@@ -22,20 +12,44 @@ namespace api
     [DynamoDBTable("music")]
     public class Music
     {
-        [DynamoDBHashKey]
-        public string Title { get; set; }
+        [DynamoDBProperty("title")]
+        public string? Title { get; set; }
 
-        [DynamoDBProperty]
-        public string Artist { get; set; }
+        [DynamoDBProperty("artist")]
+        public string? Artist { get; set; }
 
-        [DynamoDBProperty]
-        public short Year { get; set; }
+        [DynamoDBProperty("year")]
+        public short? Year { get; set; }
 
-        [DynamoDBProperty]
-        public string WebURL { get; set; }
+        [DynamoDBProperty("web_url")]
+        public string? WebURL { get; set; }
 
-        [DynamoDBProperty]
-        public string ImgURL { get; set; }
+        [DynamoDBProperty("img_url")]
+        public string? ImgURL { get; set; }
+    }
+
+    [DynamoDBTable("login")]
+    public class User
+    {
+        [DynamoDBProperty("email")]
+        public string? EMail { get; set; }
+
+        [DynamoDBProperty("username")]
+        public string? Username { get; set; }
+
+        [DynamoDBProperty("password")]
+        public string? Password { get; set; }
+    }
+
+    public class Helpers
+    {
+        public static User UserByEmail(string email)
+        {
+            AmazonDynamoDBClient dynamoClient = new();
+            DynamoDBContext dynamoContext = new(dynamoClient);
+
+            return dynamoContext.LoadAsync<User>(email).Result;
+        }
     }
 
     public class Query
@@ -70,51 +84,51 @@ namespace api
                 // Loop through the file instances and add to Dynamo and S3
                 if (data.ContainsKey("songs"))
                 {
-                    // If the table exists, drop it
-                    if (dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE))
+                    // If the table doesn't exists, create it
+                    if (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE))
                     {
-                        // Delete the table
-                        dynamoClient.DeleteTableAsync(MUSIC_TABLE).Wait();
-
-                        // Loop until table is deleted
-                        do
+                        // Recreate the table
+                        dynamoClient.CreateTableAsync(new()
                         {
-                            // Wait 1s for the table to be deleted
-                            Thread.Sleep(1000);
-                        } while (dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE));
-                    }
-
-                    // Recreate the table
-                    dynamoClient.CreateTableAsync(new()
-                    {
-                        TableName = MUSIC_TABLE,
-                        AttributeDefinitions = new() {
+                            TableName = MUSIC_TABLE,
+                            AttributeDefinitions = new() {
                                 new AttributeDefinition
                                 {
-                                    AttributeName = "Title",
+                                    AttributeName = "title",
                                     AttributeType = "S"
                                 }
                             },
-                        KeySchema = new() {
+                            KeySchema = new() {
                                 new KeySchemaElement
                                 {
-                                    AttributeName = "Title",
+                                    AttributeName = "title",
                                     KeyType = "HASH"
                                 }
                             },
-                        ProvisionedThroughput = new ProvisionedThroughput
-                        {
-                            ReadCapacityUnits = 10,
-                            WriteCapacityUnits = 10
-                        },
-                    }).Wait();
+                            ProvisionedThroughput = new ProvisionedThroughput
+                            {
+                                ReadCapacityUnits = 1,
+                                WriteCapacityUnits = 1
+                            },
+                        }).Wait();
 
-                    // Loop until table is created
-                    do
+                        // Loop until table is created
+                        do
+                        {
+                            // Wait 5s for the table to be created
+                            Thread.Sleep(5000);
+                        } while (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE));
+                    }
+
+                    // Retrieve all rows from the table
+                    List<ScanCondition> scanConditions = new() { new ScanCondition("Title", ScanOperator.IsNotNull) };
+                    List<Music> musicRows = dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
+
+                    // Delete the rows
+                    foreach (Music music in musicRows)
                     {
-                        // Wait 5s for the table to be created
-                        Thread.Sleep(5000);
-                    } while (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE));
+                        dynamoContext.DeleteAsync<Music>(music.Title).Wait();
+                    }
 
                     // Loop through the song elements
                     foreach (var song in data["songs"])
@@ -131,7 +145,7 @@ namespace api
                         {
                             Title = song["title"].Value<string>(),
                             Artist = song["artist"].Value<string>(),
-                            Year = song["year"].Value<Int16>(),
+                            Year = song["year"].Value<short>(),
                             WebURL = song["web_url"].Value<string>(),
                             ImgURL = imageUrl
                         }).Wait();
@@ -159,11 +173,41 @@ namespace api
 
             return true;
         }
+
+        public User? UserByEmailPassword(string email, string password)
+        {
+            User user = Helpers.UserByEmail(email);
+
+            if (user != null && user.Password == password)
+            {
+                return user;
+            }
+
+            return null;
+        }
     }
 
-    // public class Mutation
-    // {
+    public class Mutation
+    {
+        public bool RegisterUser(string email, string username, string password)
+        {
+            AmazonDynamoDBClient dynamoClient = new();
+            DynamoDBContext dynamoContext = new(dynamoClient);
 
-    // }
+            if (Helpers.UserByEmail(email) == null)
+            {
+                dynamoContext.SaveAsync<User>(new()
+                {
+                    EMail = email,
+                    Username = username,
+                    Password = password
+                });
+
+                return true;
+            }
+
+            return false;
+        }
+    }
 
 }

@@ -5,8 +5,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services
     .AddGraphQLServer()
     .AddQueryType<api.Query>()
+    .AddMutationType<api.Mutation>()
     .SetRequestOptions(_ => new HotChocolate.Execution.Options.RequestExecutorOptions { ExecutionTimeout = TimeSpan.FromMinutes(2) });
-//.AddMutationType<api.Mutation>();
 
 var cors = System.Environment.GetEnvironmentVariable("CORS_URLS");
 var origins = cors?.Split(',', System.StringSplitOptions.RemoveEmptyEntries);
