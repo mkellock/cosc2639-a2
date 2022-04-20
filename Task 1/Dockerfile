@@ -9,7 +9,7 @@ WORKDIR /code
 RUN npm install && npm run build
 
 #### Build the API ###
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS api
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS api
 
 # Add the code
 ADD ./api /code
