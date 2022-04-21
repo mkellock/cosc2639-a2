@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
@@ -19,18 +20,24 @@ namespace api
         public string? Artist { get; set; }
 
         [DynamoDBProperty("year")]
-        public short? Year { get; set; }
+        public int? Year { get; set; }
 
         [DynamoDBProperty("web_url")]
         public string? WebURL { get; set; }
 
         [DynamoDBProperty("img_url")]
         public string? ImgURL { get; set; }
+
+        [DynamoDBProperty("title_artist")]
+        public string? TitleArtist { get; set; }
     }
 
     [DynamoDBTable("login")]
     public class User
     {
+        [DynamoDBProperty("email_password")]
+        public string? EMailPassword { get; set; }
+
         [DynamoDBProperty("email")]
         public string? EMail { get; set; }
 
@@ -49,6 +56,7 @@ namespace api
             DynamoDBContext dynamoContext = new(dynamoClient);
 
             return dynamoContext.LoadAsync<User>(email).Result;
+
         }
     }
 
@@ -66,6 +74,11 @@ namespace api
                 AmazonS3Client s3Client = new(Amazon.RegionEndpoint.APSoutheast2);
                 AmazonDynamoDBClient dynamoClient = new();
                 DynamoDBContext dynamoContext = new(dynamoClient);
+                ProvisionedThroughput provisionedThroughput = new ProvisionedThroughput
+                {
+                    ReadCapacityUnits = 1,
+                    WriteCapacityUnits = 1
+                };
 
                 // Grab the file
                 Stream response = s3Client.GetObjectAsync(
@@ -96,32 +109,107 @@ namespace api
                                 {
                                     AttributeName = "title",
                                     AttributeType = "S"
-                                }
+                                },
+                                new AttributeDefinition
+                                {
+                                    AttributeName = "artist",
+                                    AttributeType = "S"
+                                },
+                                new AttributeDefinition
+                                {
+                                    AttributeName = "title_artist",
+                                    AttributeType = "S"
+                                },
+                                new AttributeDefinition
+                                {
+                                    AttributeName = "year",
+                                    AttributeType = "N"
+                                },
                             },
                             KeySchema = new() {
                                 new KeySchemaElement
                                 {
                                     AttributeName = "title",
                                     KeyType = "HASH"
+                                },
+                                new KeySchemaElement
+                                {
+                                    AttributeName = "year",
+                                    KeyType = "RANGE"
                                 }
                             },
-                            ProvisionedThroughput = new ProvisionedThroughput
-                            {
-                                ReadCapacityUnits = 1,
-                                WriteCapacityUnits = 1
-                            },
+                            ProvisionedThroughput = provisionedThroughput,
+                            GlobalSecondaryIndexes = new() {
+                                new() {
+                                    IndexName = "music-artist",
+                                    Projection = new() {
+                                        ProjectionType = ProjectionType.ALL
+                                    },
+                                    KeySchema = new() {
+                                        new() {
+                                            AttributeName = "artist",
+                                            KeyType = "HASH"
+                                        },
+                                        new() {
+                                            AttributeName = "year",
+                                            KeyType = "RANGE"
+                                        }
+                                    },
+                                    ProvisionedThroughput = provisionedThroughput
+                                },
+                                new() {
+                                    IndexName = "music-title-artist",
+                                    Projection = new() {
+                                        ProjectionType = ProjectionType.ALL
+                                    },
+                                    KeySchema = new() {
+                                        new() {
+                                            AttributeName = "title_artist",
+                                            KeyType = "HASH"
+                                        },
+                                        new() {
+                                            AttributeName = "year",
+                                            KeyType = "RANGE"
+                                        }
+                                    },
+                                    ProvisionedThroughput = provisionedThroughput
+                                }
+                            }
                         }).Wait();
 
                         // Loop until table is created
                         do
                         {
-                            // Wait 5s for the table to be created
-                            Thread.Sleep(5000);
-                        } while (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE));
+                            bool perRequestBillingActioned = false;
+
+                            // Wait 10s for the table to be created
+                            Thread.Sleep(10000);
+
+                            // Try to change the table mode to provisioned
+                            try
+                            {
+                                // Set the table to pay per query
+                                dynamoClient.UpdateTableAsync(new UpdateTableRequest
+                                {
+                                    TableName = MUSIC_TABLE,
+                                    BillingMode = BillingMode.PAY_PER_REQUEST
+                                }).Wait();
+
+                                // Set that we've changed the billing model
+                                perRequestBillingActioned = true;
+                            }
+                            catch
+                            {
+                                // Swallow the exception
+                            }
+
+                            // Break if we have set the table to per request billing model
+                            if (perRequestBillingActioned) break;
+                        } while (true);
                     }
 
                     // Retrieve all rows from the table
-                    List<ScanCondition> scanConditions = new() { new ScanCondition("Title", ScanOperator.IsNotNull) };
+                    List<ScanCondition> scanConditions = new() { };
                     List<Music> musicRows = dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
 
                     // Delete the rows
@@ -147,7 +235,8 @@ namespace api
                             Artist = song["artist"].Value<string>(),
                             Year = song["year"].Value<short>(),
                             WebURL = song["web_url"].Value<string>(),
-                            ImgURL = imageUrl
+                            ImgURL = imageUrl,
+                            TitleArtist = song["title"].Value<string>() + "|" + song["artist"].Value<string>()
                         }).Wait();
 
                         // Download the file
@@ -176,14 +265,69 @@ namespace api
 
         public User? UserByEmailPassword(string email, string password)
         {
-            User user = Helpers.UserByEmail(email);
-
-            if (user != null && user.Password == password)
+            try
             {
-                return user;
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+
+                return dynamoContext.LoadAsync<User>(email + "|" + password).Result;
+            }
+            catch
+            {
+                // Swallow the exception
             }
 
             return null;
+        }
+
+        public List<Music> MusicByTitleYearArtist(string? title, int? year, string? artist)
+        {
+            try
+            {
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+                List<ScanCondition> scanConditions = new();
+
+                if (year != null) // If we're searching by year
+                {
+                    scanConditions.Add(new("Year", ScanOperator.Equal, year));
+                }
+
+                // If we're searching with by title and not artist
+                if (title != null && artist == null)
+                {
+                    return dynamoContext.QueryAsync<Music>(title, new()
+                    {
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else if (title == null && artist != null) // If we're searching by artist and not title
+                {
+                    return dynamoContext.QueryAsync<Music>(artist, new()
+                    {
+                        IndexName = "music-artist",
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else if (title != null && artist != null) // If we're searching by both artist and title
+                {
+                    return dynamoContext.QueryAsync<Music>(title + "|" + artist, new()
+                    {
+                        IndexName = "music-title-artist",
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else
+                { // No search criteria, return all music
+                    return dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
+                throw;
+            }
         }
     }
 
@@ -198,6 +342,7 @@ namespace api
             {
                 dynamoContext.SaveAsync<User>(new()
                 {
+                    EMailPassword = email + "|" + password,
                     EMail = email,
                     Username = username,
                     Password = password
