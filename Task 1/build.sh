@@ -3,6 +3,7 @@ rm -rf release
 
 # Create the release directory
 mkdir release
+mkdir release/static
 
 # Mark it as executable
 chmod +x release
@@ -17,17 +18,17 @@ dotnet publish -c Release
 cd ../ui
 
 # Build the ui
-npm install && npm run build
+npm install --force && npm run build
 
 # back to the parent folder
 cd ..
 
 # Copy the build assets
-cp -r api/bin/Release/net6.0/publish/ ./release
-cp -r ui/build/ ./release/static
+cp -r api/bin/Release/net6.0/publish/* ./release
+cp -r ui/build/* ./release/static
 
 # Enter the release directory
 cd release
 
 # Run the application
-dotnet api.dll
+sudo dotnet api.dll
