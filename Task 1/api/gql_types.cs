@@ -94,9 +94,10 @@ namespace api
 
                 return dynamoContext.LoadAsync<User>(email + "|" + password).Result;
             }
-            catch
+            catch (Exception ex)
             {
-                // Swallow the exception
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
             return null;
@@ -104,55 +105,75 @@ namespace api
 
         public List<Music> MusicByTitleYearArtist(string? title, int? year, string? artist)
         {
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
-            List<ScanCondition> scanConditions = new();
+            try
+            {
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+                List<ScanCondition> scanConditions = new();
 
-            if (year != null) // If we're searching by year
+                if (year != null) // If we're searching by year
+                {
+                    scanConditions.Add(new("Year", ScanOperator.Equal, year));
+                }
+
+                // If we're searching with by title and not artist
+                if (title != null && artist == null)
+                {
+                    return dynamoContext.QueryAsync<Music>(title, new()
+                    {
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else if (title == null && artist != null) // If we're searching by artist and not title
+                {
+                    return dynamoContext.QueryAsync<Music>(artist, new()
+                    {
+                        IndexName = "music-artist",
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else if (title != null && artist != null) // If we're searching by both artist and title
+                {
+                    return dynamoContext.QueryAsync<Music>(title + "|" + artist, new()
+                    {
+                        IndexName = "music-title-artist",
+                        QueryFilter = scanConditions
+                    }).GetRemainingAsync().Result;
+                }
+                else
+                { // No search criteria, return all music
+                    return dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
+                }
+            }
+            catch (Exception ex)
             {
-                scanConditions.Add(new("Year", ScanOperator.Equal, year));
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
-            // If we're searching with by title and not artist
-            if (title != null && artist == null)
-            {
-                return dynamoContext.QueryAsync<Music>(title, new()
-                {
-                    QueryFilter = scanConditions
-                }).GetRemainingAsync().Result;
-            }
-            else if (title == null && artist != null) // If we're searching by artist and not title
-            {
-                return dynamoContext.QueryAsync<Music>(artist, new()
-                {
-                    IndexName = "music-artist",
-                    QueryFilter = scanConditions
-                }).GetRemainingAsync().Result;
-            }
-            else if (title != null && artist != null) // If we're searching by both artist and title
-            {
-                return dynamoContext.QueryAsync<Music>(title + "|" + artist, new()
-                {
-                    IndexName = "music-title-artist",
-                    QueryFilter = scanConditions
-                }).GetRemainingAsync().Result;
-            }
-            else
-            { // No search criteria, return all music
-                return dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
-            }
+            return new();
         }
 
         public List<Subscription> SubscriptionByEmail(string email)
         {
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
-            List<ScanCondition> scanConditions = new()
+            try
             {
-                new("EMail", ScanOperator.Equal, email)
-            };
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+                List<ScanCondition> scanConditions = new()
+                {
+                    new("EMail", ScanOperator.Equal, email)
+                };
 
-            return dynamoContext.ScanAsync<Subscription>(scanConditions).GetRemainingAsync().Result;
+                return dynamoContext.ScanAsync<Subscription>(scanConditions).GetRemainingAsync().Result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
+            }
+
+            return new();
         }
     }
 
@@ -363,20 +384,28 @@ namespace api
 
         public bool RegisterUser(string email, string username, string password)
         {
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
-
-            if (Helpers.UserByEmail(email) == null)
+            try
             {
-                dynamoContext.SaveAsync<User>(new()
-                {
-                    EMailPassword = email + "|" + password,
-                    EMail = email,
-                    Username = username,
-                    Password = password
-                });
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
 
-                return true;
+                if (Helpers.UserByEmail(email) == null)
+                {
+                    dynamoContext.SaveAsync<User>(new()
+                    {
+                        EMailPassword = email + "|" + password,
+                        EMail = email,
+                        Username = username,
+                        Password = password
+                    });
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
             return false;
@@ -384,28 +413,36 @@ namespace api
 
         public bool RegisterSubscription(string title, string artist, string email)
         {
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
-            Query query = new();
-            List<Music> music = query.MusicByTitleYearArtist(title, null, artist);
-
-            if (music.Count > 0)
+            try
             {
-                Music musicItem = music.First();
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+                Query query = new();
+                List<Music> music = query.MusicByTitleYearArtist(title, null, artist);
 
-                dynamoContext.SaveAsync<Subscription>(new()
+                if (music.Count > 0)
                 {
-                    EMail = email,
-                    Title = musicItem.Title,
-                    Artist = musicItem.Artist,
-                    Year = musicItem.Year,
-                    WebURL = musicItem.WebURL,
-                    ImgURL = musicItem.ImgURL,
-                    TitleArtist = musicItem.TitleArtist,
-                    EMailTitleArtist = email + "|" + musicItem.TitleArtist
-                }).Wait();
+                    Music musicItem = music.First();
 
-                return true;
+                    dynamoContext.SaveAsync<Subscription>(new()
+                    {
+                        EMail = email,
+                        Title = musicItem.Title,
+                        Artist = musicItem.Artist,
+                        Year = musicItem.Year,
+                        WebURL = musicItem.WebURL,
+                        ImgURL = musicItem.ImgURL,
+                        TitleArtist = musicItem.TitleArtist,
+                        EMailTitleArtist = email + "|" + musicItem.TitleArtist
+                    }).Wait();
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
             return false;
@@ -426,9 +463,9 @@ namespace api
             {
                 Console.WriteLine(ex.Message);
                 Console.WriteLine(ex.StackTrace);
-
-                return false;
             }
+
+            return false;
         }
     }
 

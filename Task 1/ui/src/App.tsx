@@ -68,6 +68,8 @@ export function App() {
     };
 
     const onRegister = () => {
+        setLoginInError(false);
+        setLogInErrorMessage('');
         setLoginHidden(true);
         setRegisterHidden(false);
     };
@@ -83,7 +85,7 @@ export function App() {
         const registerUserVariables = {
             email: registerDetails.email,
             username: registerDetails.username,
-            password: registerDetails.password
+            password: registerDetails.password,
         };
 
         client
@@ -125,9 +127,7 @@ export function App() {
         <ChakraProvider>
             <Login onSubmit={onLoginSubmit} onRegister={onRegister} hidden={loginHidden} inError={loginInError} errorMessage={logInErrorMessage} />
             <Register hidden={registerHidden} onSubmit={onRegisterSubmit} inError={registerError} errorMessage={registerErrorMessage} onLogin={onLogin} />
-            <MainUI hidden={mainUIHidden} onLogoutClick={onLogoutClick} userDetails={userDetails}>
-                
-            </MainUI>
+            <MainUI hidden={mainUIHidden} onLogoutClick={onLogoutClick} userDetails={userDetails}></MainUI>
         </ChakraProvider>
     );
 }
