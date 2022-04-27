@@ -160,45 +160,47 @@ namespace api
     {
         public bool LoadMusic()
         {
-            // Set up a new instance of Dynamo and S3 clients
-            AmazonS3Client s3Client = new(Amazon.RegionEndpoint.APSoutheast2);
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
-            const string BUCKET = "cosc2639-2-s3812552";
-            const string MUSIC_FILE = "a2.json";
-            const string MUSIC_TABLE = "music";
-
-            ProvisionedThroughput provisionedThroughput = new ProvisionedThroughput
+            try
             {
-                ReadCapacityUnits = 1,
-                WriteCapacityUnits = 1
-            };
+                // Set up a new instance of Dynamo and S3 clients
+                AmazonS3Client s3Client = new(Amazon.RegionEndpoint.APSoutheast2);
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
+                const string BUCKET = "cosc2639-2-s3812552";
+                const string MUSIC_FILE = "a2.json";
+                const string MUSIC_TABLE = "music";
 
-            // Grab the file
-            Stream response = s3Client.GetObjectAsync(
-                new()
+                ProvisionedThroughput provisionedThroughput = new ProvisionedThroughput
                 {
-                    BucketName = BUCKET,
-                    Key = MUSIC_FILE,
-                }
-            ).Result.ResponseStream;
+                    ReadCapacityUnits = 1,
+                    WriteCapacityUnits = 1
+                };
 
-            // Deserialise the JSON as an object so we can iterate
-            JObject data = JsonConvert.DeserializeObject<JObject>(
-                new StreamReader(response).ReadToEnd()
-            );
-
-            // Loop through the file instances and add to Dynamo and S3
-            if (data.ContainsKey("songs"))
-            {
-                // If the table doesn't exists, create it
-                if (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE))
-                {
-                    // Recreate the table
-                    dynamoClient.CreateTableAsync(new()
+                // Grab the file
+                Stream response = s3Client.GetObjectAsync(
+                    new()
                     {
-                        TableName = MUSIC_TABLE,
-                        AttributeDefinitions = new() {
+                        BucketName = BUCKET,
+                        Key = MUSIC_FILE,
+                    }
+                ).Result.ResponseStream;
+
+                // Deserialise the JSON as an object so we can iterate
+                JObject data = JsonConvert.DeserializeObject<JObject>(
+                    new StreamReader(response).ReadToEnd()
+                );
+
+                // Loop through the file instances and add to Dynamo and S3
+                if (data.ContainsKey("songs"))
+                {
+                    // If the table doesn't exists, create it
+                    if (!dynamoClient.ListTablesAsync().Result.TableNames.Contains(MUSIC_TABLE))
+                    {
+                        // Recreate the table
+                        dynamoClient.CreateTableAsync(new()
+                        {
+                            TableName = MUSIC_TABLE,
+                            AttributeDefinitions = new() {
                                 new AttributeDefinition
                                 {
                                     AttributeName = "title",
@@ -220,7 +222,7 @@ namespace api
                                     AttributeType = "N"
                                 },
                             },
-                        KeySchema = new() {
+                            KeySchema = new() {
                                 new KeySchemaElement
                                 {
                                     AttributeName = "title",
@@ -232,8 +234,8 @@ namespace api
                                     KeyType = "RANGE"
                                 }
                             },
-                        ProvisionedThroughput = provisionedThroughput,
-                        GlobalSecondaryIndexes = new() {
+                            ProvisionedThroughput = provisionedThroughput,
+                            GlobalSecondaryIndexes = new() {
                                 new() {
                                     IndexName = "music-artist",
                                     Projection = new() {
@@ -269,86 +271,94 @@ namespace api
                                     ProvisionedThroughput = provisionedThroughput
                                 }
                             }
-                    }).Wait();
+                        }).Wait();
 
-                    // Loop until table is created
-                    do
-                    {
-                        bool perRequestBillingActioned = false;
-
-                        // Wait 10s for the table to be created
-                        Thread.Sleep(10000);
-
-                        // Try to change the table mode to provisioned
-                        try
+                        // Loop until table is created
+                        do
                         {
-                            // Set the table to pay per query
-                            dynamoClient.UpdateTableAsync(new UpdateTableRequest
+                            bool perRequestBillingActioned = false;
+
+                            // Wait 10s for the table to be created
+                            Thread.Sleep(10000);
+
+                            // Try to change the table mode to provisioned
+                            try
                             {
-                                TableName = MUSIC_TABLE,
-                                BillingMode = BillingMode.PAY_PER_REQUEST
-                            }).Wait();
+                                // Set the table to pay per query
+                                dynamoClient.UpdateTableAsync(new UpdateTableRequest
+                                {
+                                    TableName = MUSIC_TABLE,
+                                    BillingMode = BillingMode.PAY_PER_REQUEST
+                                }).Wait();
 
-                            // Set that we've changed the billing model
-                            perRequestBillingActioned = true;
-                        }
-                        catch
-                        {
-                            // Swallow the exception
-                        }
+                                // Set that we've changed the billing model
+                                perRequestBillingActioned = true;
+                            }
+                            catch
+                            {
+                                // Swallow the exception
+                            }
 
-                        // Break if we have set the table to per request billing model
-                        if (perRequestBillingActioned) break;
-                    } while (true);
-                }
+                            // Break if we have set the table to per request billing model
+                            if (perRequestBillingActioned) break;
+                        } while (true);
+                    }
 
-                // Retrieve all rows from the table
-                List<ScanCondition> scanConditions = new() { };
-                List<Music> musicRows = dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
+                    // Retrieve all rows from the table
+                    List<ScanCondition> scanConditions = new() { };
+                    List<Music> musicRows = dynamoContext.ScanAsync<Music>(scanConditions).GetRemainingAsync().Result;
 
-                // Delete the rows
-                foreach (Music music in musicRows)
-                {
-                    dynamoContext.DeleteAsync<Music>(music.Title, music.Year).Wait();
-                }
-
-                // Loop through the song elements
-                foreach (var song in data["songs"])
-                {
-                    // Output song title
-                    Console.WriteLine("Downloading: " + song["title"].Value<string>());
-
-                    // Grab the image url
-                    string imageUrl = song["img_url"].Value<string>();
-                    imageUrl = imageUrl[(imageUrl.LastIndexOf("/") + 1)..];
-
-                    // Add the row to Dynamo
-                    dynamoContext.SaveAsync(new Music
+                    // Delete the rows
+                    foreach (Music music in musicRows)
                     {
-                        Title = song["title"].Value<string>(),
-                        Artist = song["artist"].Value<string>(),
-                        Year = song["year"].Value<short>(),
-                        WebURL = song["web_url"].Value<string>(),
-                        ImgURL = imageUrl,
-                        TitleArtist = song["title"].Value<string>() + "|" + song["artist"].Value<string>()
-                    }).Wait();
+                        dynamoContext.DeleteAsync<Music>(music.Title, music.Year).Wait();
+                    }
 
-                    // Download the file
-                    HttpResponseMessage file = new HttpClient().GetAsync(song["img_url"].Value<string>()).Result;
+                    // Loop through the song elements
+                    foreach (var song in data["songs"])
+                    {
+                        // Output song title
+                        Console.WriteLine("Downloading: " + song["title"].Value<string>());
 
-                    // Put it in S3
-                    s3Client.PutObjectAsync(
-                        new()
+                        // Grab the image url
+                        string imageUrl = song["img_url"].Value<string>();
+                        imageUrl = imageUrl[(imageUrl.LastIndexOf("/") + 1)..];
+
+                        // Add the row to Dynamo
+                        dynamoContext.SaveAsync(new Music
                         {
-                            BucketName = BUCKET,
-                            Key = string.Concat("images/", imageUrl),
-                            InputStream = file.Content.ReadAsStream()
-                        }
-                    ).Wait();
+                            Title = song["title"].Value<string>(),
+                            Artist = song["artist"].Value<string>(),
+                            Year = song["year"].Value<short>(),
+                            WebURL = song["web_url"].Value<string>(),
+                            ImgURL = imageUrl,
+                            TitleArtist = song["title"].Value<string>() + "|" + song["artist"].Value<string>()
+                        }).Wait();
+
+                        // Download the file
+                        HttpResponseMessage file = new HttpClient().GetAsync(song["img_url"].Value<string>()).Result;
+
+                        // Put it in S3
+                        s3Client.PutObjectAsync(
+                            new()
+                            {
+                                BucketName = BUCKET,
+                                Key = string.Concat("images/", imageUrl),
+                                InputStream = file.Content.ReadAsStream()
+                            }
+                        ).Wait();
+                    }
                 }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.StackTrace);
             }
 
-            return true;
+            return false;
         }
 
         public bool RegisterUser(string email, string username, string password)
