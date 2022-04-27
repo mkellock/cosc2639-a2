@@ -15,7 +15,7 @@ export function App() {
     const [registerError, setRegisterError] = useState(false);
     const [registerErrorMessage, setRegisterInErrorMessage] = useState<string>();
 
-    let gqlUri = 'http://localhost/graphql';
+    let gqlUri = '/graphql';
 
     const client = new ApolloClient({
         uri: gqlUri,
@@ -51,6 +51,8 @@ export function App() {
                     // If authentication passes
                     setMainUIHidden(false);
                     setLoginHidden(true);
+                    setLoginInError(false);
+                    setLogInErrorMessage('');
 
                     // Load the user's data
                     loadUser({ ...result.data.userByEmailPassword });
@@ -59,6 +61,8 @@ export function App() {
     };
 
     const onLogin = () => {
+        setLoginInError(false);
+        setLogInErrorMessage('');
         setLoginHidden(false);
         setRegisterHidden(true);
     };

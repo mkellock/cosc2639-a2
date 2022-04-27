@@ -60,13 +60,26 @@ namespace api
 
     public class Helpers
     {
-        public static User UserByEmail(string email)
+        public static User? UserByEmail(string email)
         {
-            AmazonDynamoDBClient dynamoClient = new();
-            DynamoDBContext dynamoContext = new(dynamoClient);
+            try
+            {
+                AmazonDynamoDBClient dynamoClient = new();
+                DynamoDBContext dynamoContext = new(dynamoClient);
 
-            return dynamoContext.LoadAsync<User>(email).Result;
+                return dynamoContext.QueryAsync<User>(email, new DynamoDBOperationConfig()
+                {
+                    IndexName = "email-login"
+                }).GetRemainingAsync().Result.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                // Swallow the exception
+                Console.WriteLine(ex.Message);
+                Console.WriteLine(ex.InnerException);
+            }
 
+            return null;
         }
     }
 
