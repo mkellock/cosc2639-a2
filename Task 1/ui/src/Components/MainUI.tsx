@@ -9,7 +9,7 @@ interface InputProps {
 }
 
 export interface UserDetails {
-    email: string;
+    eMail: string;
     username: string;
 }
 
@@ -22,7 +22,9 @@ export function MainUI(props: InputProps) {
                     <Spacer />
                     <Box>
                         <ColorModeSwitcher />
-                        <Button onClick={props.onLogoutClick}>Logout</Button>
+                        <Button borderRadius={15} onClick={props.onLogoutClick}>
+                            Logout
+                        </Button>
                     </Box>
                 </Flex>
                 <Divider />

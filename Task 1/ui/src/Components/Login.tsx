@@ -50,7 +50,9 @@ export function Login(props: InputProps) {
                 <Stack spacing={3} width={450} padding={3} hidden={false}>
                     <Input onChange={(e) => setEmail(e.target.value)} placeholder="EMail" />
                     <Input onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" />
-                    <Button onClick={submit}>Login</Button>
+                    <Button borderRadius={15} onClick={submit}>
+                        Login
+                    </Button>
                     <Link onClick={props.onRegister}>Register</Link>
                 </Stack>
             </>

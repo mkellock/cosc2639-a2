@@ -54,7 +54,9 @@ export function Register(props: InputProps) {
                     <Input onChange={(e) => setEmail(e.target.value)} placeholder="EMail" />
                     <Input onChange={(e) => setUsername(e.target.value)} placeholder="Username" />
                     <Input onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password" />
-                    <Button onClick={submit}>Register</Button>
+                    <Button borderRadius={15} onClick={submit}>
+                        Register
+                    </Button>
                     <Link onClick={props.onLogin}>Login</Link>
                 </Stack>
             </>
