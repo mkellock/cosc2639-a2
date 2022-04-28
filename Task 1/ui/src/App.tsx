@@ -22,7 +22,7 @@ export function App() {
     const [title, setTitle] = useState<string | null>(null);
     const [year, setYear] = useState<number | null>(null);
 
-    let gqlUri = 'http://0.0.0.0/graphql';
+    let gqlUri = '/graphql';
 
     const client = new ApolloClient({
         uri: gqlUri,
