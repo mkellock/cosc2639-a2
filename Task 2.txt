@@ -1,0 +1,18 @@
+Name:           Matthew Kellock
+Student No.:    s3812552
+
+-- Task 2 --
+For assignment 3 I intend to implement a social networking app, however my motivations are to implement an enterprise level, (virtually) infinitely scalable application, thus will use serverless, decoupled compute (e.g., SQS, Lambda, S3, API Gateway, CloudFront, ECS Fargate, Docker Hub, and DynamoDB), and AWS QuickSight for management dashboards available to administrators. 
+
+In assignment one, task three, I referenced using CloudFormation. In researching CloudFormation, I have found issues in setting up and deploying resources. I think I could spend a good portion of my time on something that bears no impact on marks, so I may just deploy all resources via “click-ops” (i.e., via the console).
+
+The application will do the following:
+-	The user can scroll through videos and images. This will use API Gateway, Lambda, DynamoDB, CloudFront, and S3
+-	A user can browse posts and sort by either recent or top posts, this will use API Gateway, Lambda, and DynamoDB.
+-	Before a user can post a message, they need to sign up or log in to the application. This again will use API Gateway, Lambda, and DynamoDB.
+-	After logging in a user can create a group, categorising posts around themes, or post a message to one of the groups, regardless of whether the user created it or not. This functionality will use API Gateway, Lambda, S3 and DynamoDB.
+-	The users can search for a groups, utilising API Gateway, Lambda, and DynamoDB to do so.
+-	The user can post a text message, which will immediately appear on the group as a public message, utilising API Gateway, Lambda, and DynamoDB to do so.
+-	The user can post with a video or photo. If they do, it will go on to a message queue, the photo or video will be resized to appropriate dimensions for sharing, using SQS for decoupling, ECS Fargate for image/video processing and S3 for storage
+-	If the user that is logging in is an administrator, they will have an additional option to go to a metrics page to see intel on the communities. This function will use QuickSight to 
+-	Lastly, each post will have its location identified by iplocation.net, a free API for determining geolocation (https://api.iplocation.net/, or an equivalent) asynchronously, using SQS, Lambda, and DynamoDB.
